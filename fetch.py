@@ -1,5 +1,6 @@
 import json, requests, sqlalchemy
-from sqlalchemy import create_engine, Column, Integer, Float, String, Date
+from sqlalchemy import create_engine, Column, Integer, Float, String, Date, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 
 engine = create_engine('sqlite:///:memory:', echo=True)
@@ -10,26 +11,47 @@ Base = declarative_base()
 STOCKS = ['AAPL', 'TSLA', 'AMZN', 'FB', 'IBM', 'SNAP', 'NVDA', 'GOOGL']
 
 # Default returns JSON
-QUARTERLY_URL = "https://financialmodelingprep.com/api/v3/financials/income-statement/"
+URL = "https://financialmodelingprep.com/api/v3/financials/income-statement/"
 
 
 class Stock(Base):
-    __tablename__ = 'stocks'
-
+    __tablename__ = "stocks"
     id = Column(String, primary_key=True) # Ticker Symbol
+    financials = relationship("AnnualFinancial", backref="stock")
 
     def __repr__(self):
         return "<Stock(symbol='%s')>" % self.id
 
-class Financials:
-
+class AnnualFinancial(Base):
+    __tablename__ = "annualfinancials"
     id = Column(Integer, primary_key=True)
-    date = Column()
+    stock_id = Column(String, ForeignKey('stocks.id'))
+
+    date = Column(Date)
+    revenue = Column(Float)
+    revenue_growth = Column(Float)
+    cost_of_revenue = Column(Float)
+
+    def __repr__(self):
+        return "<Financial(stock='%s',date='%s')>" % (stock_id, date)
 
 
 for stock in STOCKS:
     print("fetching %s" % stock)
-    r = requests.get(QUARTERLY_URL+stock)
-    print(r.status_code)
-
-    input()
+    r = requests.get(URL+stock)
+    if r.status_code == 200:
+        new_stock = Stock(
+            id = stock,
+        )
+        print(new_stock)
+        financials = r.json()['financials']
+        for financial in financials:
+            new_financial = AnnualFinancial(
+                stock_id = new_stock.id,
+                date = financial['date'],
+                revenue = financial['Revenue'],
+                revenue_growth = financial['Revenue Growth']
+            )
+            print(new_financial)
+        print(financials[0])
+        input()
