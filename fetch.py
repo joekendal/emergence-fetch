@@ -17,7 +17,6 @@ URL = "https://financialmodelingprep.com/api/v3/financials/income-statement/"
 class Stock(Base):
     __tablename__ = "stocks"
     id = Column(String, primary_key=True) # Ticker Symbol
-    financials = relationship("AnnualFinancial", backref="stock")
 
     def __repr__(self):
         return "<Stock(symbol='%s')>" % self.id
@@ -43,7 +42,6 @@ for stock in STOCKS:
         new_stock = Stock(
             id = stock,
         )
-        print(new_stock.id)
         financials = r.json()['financials']
         for financial in financials:
             new_financial = AnnualFinancial(
@@ -53,5 +51,3 @@ for stock in STOCKS:
                 revenue_growth = financial['Revenue Growth']
             )
             print(new_financial)
-        print(financials[0])
-        input()
