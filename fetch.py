@@ -33,7 +33,7 @@ class AnnualFinancial(Base):
     cost_of_revenue = Column(Float)
 
     def __repr__(self):
-        return "<Financial(stock='%s',date='%s')>" % (stock_id, date)
+        return "<Financial(stock='%s',date='%s')>" % (self.stock_id, self.date)
 
 
 for stock in STOCKS:
@@ -43,7 +43,7 @@ for stock in STOCKS:
         new_stock = Stock(
             id = stock,
         )
-        print(new_stock)
+        print(new_stock.id)
         financials = r.json()['financials']
         for financial in financials:
             new_financial = AnnualFinancial(
