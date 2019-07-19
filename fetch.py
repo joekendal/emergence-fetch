@@ -29,7 +29,7 @@ class Financials:
 
 for stock in STOCKS:
     print("fetching %s" % stock)
-    r = requests.get(QUARTERLY_URL+stock+'?period=quarter')
+    r = requests.get(QUARTERLY_URL+stock)
     print(r.status_code)
 
     input()
