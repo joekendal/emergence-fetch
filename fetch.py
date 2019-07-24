@@ -42,7 +42,7 @@ def update_financial_statements(stock, db):
     for statement_type in statement_types:
         # If latest annual statement exists skip
         if db.query(statement_type['Model']).filter(statement_type['Model'].stock_id==stock, sqlextract('year', statement_type['Model'].date)==2018).first():
-            print("[!] Skipping %s %s" % (stock, statement_type['Model'].__tablename__))
+            print("[!] Already got %s %s" % (stock, statement_type['Model'].__tablename__))
             continue
 
         r = requests.get(statement_type['URL']+stock)
@@ -167,9 +167,9 @@ def update_financial_statements(stock, db):
 
 def fetch():
     db = Session()
-    update_stock_list(db)
+    #update_stock_list(db)
     for stock in db.query(Stock).all():
-        print("[*] Updating %s" % stock.symbol)
+        print("[*] Checking for %s" % stock.symbol)
         update_financial_statements(stock.symbol, db)
 
 """
