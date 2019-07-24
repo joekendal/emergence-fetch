@@ -1,5 +1,4 @@
-import json, requests,os
-from sqlalchemy import extract as sqlextract
+import json, requests,os,socket,socks
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from time import sleep
@@ -11,12 +10,39 @@ Base.metadata.create_all(engine, checkfirst=True)
 Session = sessionmaker(bind=engine)
 
 
+class c:
+    """
+    Terminal output colours
+    """
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+def change_proxy():
+    # ip = '127.0.0.1'
+    # port = 1080
+    # socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, ip, port)
+    # socket.socket = socks.socksocket
+
+    r = requests.get("https://api.getproxylist.com/proxy?protocol[]=socks5").json()
+    new_ip = r['ip']
+    new_port = r['port']
+    socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, ip, port)
+    socket.socket = socks.socksocket
+    print(c.BOLD+"NEW"+c.ENDC+" Proxy: %s:%s" % (ip,port))
+
 def update_stock_list(db):
     url = 'https://financialmodelingprep.com/api/v3/company/stock/list'
     r = requests.get(url)
     data = r.json()['symbolsList']
     if len(data) != db.query(Stock).count():
-        print('[*] Amending stock database...')
+        print("["+c.OKGREEN+"*"+c.ENDC+"] Amending stock database...")
         stocks = [Stock(symbol=_['symbol'],name=_['name']) for _ in data if not db.query(Stock).filter_by(symbol=_['symbol']).first()]
         db.bulk_save_objects(stocks)
         db.commit()
@@ -40,22 +66,33 @@ def update_financial_statements(stock, db):
     ]
 
     for statement_type in statement_types:
-        # If latest annual statement exists skip
-        if db.query(statement_type['Model']).filter(statement_type['Model'].stock_id==stock, sqlextract('year', statement_type['Model'].date)==2018).first():
-            print("[!] Already got %s %s" % (stock, statement_type['Model'].__tablename__))
+        if db.query(statement_type['Model']).filter(statement_type['Model'].stock_id==stock).first():
+            #print("\t[!] Already got %s %s" % (stock, statement_type['Model'].__tablename__))
             continue
-
-        r = requests.get(statement_type['URL']+stock)
+        else:
+            print("\t["+c.OKGREEN+"+"+c.ENDC+"] Fetching %s %s" % (stock, statement_type['Model'].__tablename__))
+        while 1:
+            try:
+                r = requests.get(statement_type['URL']+stock,timeout=30)
+            except:
+                change_proxy()
+                continue
+            else:
+                break
         if r.status_code == 200:
             statements = sorted(r.json()['financials'], key=lambda x: x['date'])
+            if not statements:
+                print("\t["+c.FAIL+"-"+c.ENDC+"] Missing key financial data so removing %s from db" % stock)
+                db.delete(db.query(Stock).filter_by(symbol=stock).first())
+                db.commit()
+                break
             for statement in statements:
                 try:
                     statement_date = datetime.strptime(statement['date'], '%Y-%m-%d').date()
                 except ValueError:
                     try:
                         statement_date = datetime.strptime(statement['date'], '%Y-%m').date()
-                    except:
-                        raise
+                    except: raise
                 if not db.query(statement_type['Model'])\
                     .filter(statement_type['Model'].stock_id==stock,
                             statement_type['Model'].date==statement_date).one_or_none():
@@ -155,21 +192,15 @@ def update_financial_statements(stock, db):
 
                     db.add(new_statement)
                     db.commit()
-        elif r.status_code == 429:
-            print("[429] Too many requests!", end="")
-            if r.headers.get('Retry-After'):
-                retry_after = r.headers.get('Retry-After')
-                print(" Retrying in %s seconds" % retry_after)
-                sleep(retry_after)
         else:
-            print("[!] Error fetching %s Income Statements" % stock)
+            print("\t["+c.FAIL+"!"+c.ENDC+"] Error fetching %s %s" % (stock, statement_type['Model'].__tablename__))
 
 
 def fetch():
     db = Session()
     #update_stock_list(db)
-    for stock in db.query(Stock).all():
-        print("[*] Checking for %s" % stock.symbol)
+    for index, stock in enumerate(db.query(Stock).order_by(Stock.symbol).all()):
+        print("["+c.BOLD+f"{index+1}"+c.ENDC+f"/{db.query(Stock).count()}] Checking "+c.BOLD+f"{stock.symbol}"+c.ENDC+f" ({stock.name})")
         update_financial_statements(stock.symbol, db)
 
 """

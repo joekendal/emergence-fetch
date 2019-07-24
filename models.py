@@ -9,9 +9,9 @@ class Stock(Base):
     __tablename__ = "stocks"
     symbol = Column(String, primary_key=True) # Ticker Symbol
     name = Column(String)
-    income_statements = relationship("AnnualIncomeStatement", back_populates="stock")
-    balance_sheets = relationship("AnnualBalanceSheet", back_populates="stock")
-    cash_flows = relationship("AnnualCashFlow", back_populates="stock")
+    income_statements = relationship("AnnualIncomeStatement", back_populates="stock", cascade='all, delete-orphan')
+    balance_sheets = relationship("AnnualBalanceSheet", back_populates="stock", cascade='all, delete-orphan')
+    cash_flows = relationship("AnnualCashFlow", back_populates="stock", cascade='all, delete-orphan')
 
     def __repr__(self):
         return "<Stock(symbol='%s',name='%s')>" % (self.symbol, self.name)
