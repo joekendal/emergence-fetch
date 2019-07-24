@@ -1,17 +1,28 @@
-import json, requests
+import json, requests,os
+from sqlalchemy import extract as sqlextract
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from time import sleep
 from models import *
 
 
-engine = create_engine('sqlite:///test.db')
+engine = create_engine(f"postgresql://{os.environ['username']}:{os.environ['password']}@postgresql-emergence.c9mqiuvx2w8c.eu-west-2.rds.amazonaws.com:5432/emergence_data", echo=False)
 Base.metadata.create_all(engine, checkfirst=True)
 Session = sessionmaker(bind=engine)
 
 
-STOCKS = ['AAPL', 'TSLA', 'AMZN', 'FB', 'IBM', 'SNAP', 'NVDA', 'GOOGL']
+def update_stock_list(db):
+    url = 'https://financialmodelingprep.com/api/v3/company/stock/list'
+    r = requests.get(url)
+    data = r.json()['symbolsList']
+    if len(data) != db.query(Stock).count():
+        print('[*] Amending stock database...')
+        stocks = [Stock(symbol=_['symbol'],name=_['name']) for _ in data if not db.query(Stock).filter_by(symbol=_['symbol']).first()]
+        db.bulk_save_objects(stocks)
+        db.commit()
 
-def get_financial_statements(stock, db):
+
+def update_financial_statements(stock, db):
 
     statement_types = [
         {
@@ -29,28 +40,33 @@ def get_financial_statements(stock, db):
     ]
 
     for statement_type in statement_types:
+        # If latest annual statement exists skip
+        if db.query(statement_type['Model']).filter(statement_type['Model'].stock_id==stock, sqlextract('year', statement_type['Model'].date)==2018).first():
+            print("[!] Skipping %s %s" % (stock, statement_type['Model'].__tablename__))
+            continue
 
         r = requests.get(statement_type['URL']+stock)
         if r.status_code == 200:
-            if not db.query(Stock).filter_by(id=stock).one_or_none():
-                new_stock = Stock(id=stock)
-                db.add(new_stock)
-                db.commit()
-
-            statements = r.json()['financials']
-
+            statements = sorted(r.json()['financials'], key=lambda x: x['date'])
             for statement in statements:
-                statement_date = datetime.strptime(statement['date'], '%Y-%m-%d').date()
+                try:
+                    statement_date = datetime.strptime(statement['date'], '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        statement_date = datetime.strptime(statement['date'], '%Y-%m').date()
+                    except:
+                        raise
                 if not db.query(statement_type['Model'])\
                     .filter(statement_type['Model'].stock_id==stock,
                             statement_type['Model'].date==statement_date).one_or_none():
 
+                    statement = {key: None if not value else value for key, value in statement.items()}
                     if statement_type['Model'] == AnnualIncomeStatement:
                         new_statement = AnnualIncomeStatement(
                             stock_id = stock,
                             date = statement_date,
                             revenue = statement['Revenue'],
-                            revenue_growth = statement['Revenue Growth'] or None,
+                            revenue_growth = statement['Revenue Growth'],
                             cost_of_revenue = statement['Cost of Revenue'],
                             gross_profit = statement['Gross Profit'],
                             r_and_d_expenses = statement['R&D Expenses'],
@@ -67,8 +83,8 @@ def get_financial_statements(stock, db):
                             net_income_com = statement['Net Income Com'],
                             eps = statement['EPS'],
                             eps_diluted = statement['EPS Diluted'],
-                            weighted_avg_shs_out = statement['Weighted Average Shs Out'] or None,
-                            weighted_avg_shs_out_dil = statement['Weighted Average Shs Out (Dil)'] or None,
+                            weighted_avg_shs_out = statement['Weighted Average Shs Out'],
+                            weighted_avg_shs_out_dil = statement['Weighted Average Shs Out (Dil)'],
                             dividend_per_share = statement['Dividend per Share'],
                             gross_margin = statement['Gross Margin'],
                             ebitda_margin = statement['EBITDA Margin'],
@@ -139,22 +155,28 @@ def get_financial_statements(stock, db):
 
                     db.add(new_statement)
                     db.commit()
+        elif r.status_code == 429:
+            print("[429] Too many requests!", end="")
+            if r.headers.get('Retry-After'):
+                retry_after = r.headers.get('Retry-After')
+                print(" Retrying in %s seconds" % retry_after)
+                sleep(retry_after)
         else:
             print("[!] Error fetching %s Income Statements" % stock)
 
 
-
 def fetch():
     db = Session()
-    for stock in STOCKS:
-        print("[*] Fetching %s..." % stock)
-        get_financial_statements(stock, db)
+    update_stock_list(db)
+    for stock in db.query(Stock).all():
+        print("[*] Updating %s" % stock.symbol)
+        update_financial_statements(stock.symbol, db)
 
 """
 To find financials for stock by year
 
 session.query(AnnualIncomeStatement).join(Stock)\
-        .filter(Stock.id=='AAPL')\
+        .filter(Stock.symbol=='AAPL')\
         .filter(AnnualIncomeStatement.date.like("2018%"))\
         .one_or_none()
 or...

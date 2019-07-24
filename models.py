@@ -7,19 +7,20 @@ Base = declarative_base()
 
 class Stock(Base):
     __tablename__ = "stocks"
-    id = Column(String, primary_key=True) # Ticker Symbol
+    symbol = Column(String, primary_key=True) # Ticker Symbol
+    name = Column(String)
     income_statements = relationship("AnnualIncomeStatement", back_populates="stock")
     balance_sheets = relationship("AnnualBalanceSheet", back_populates="stock")
     cash_flows = relationship("AnnualCashFlow", back_populates="stock")
 
     def __repr__(self):
-        return "<Stock(symbol='%s')>" % self.id
+        return "<Stock(symbol='%s',name='%s')>" % (self.symbol, self.name)
 
 
 class AnnualIncomeStatement(Base):
     __tablename__ = "annualincomestatements"
 
-    stock_id = Column(String, ForeignKey('stocks.id'), primary_key=True)
+    stock_id = Column(String, ForeignKey('stocks.symbol'), primary_key=True)
     date = Column(Date, primary_key=True)
 
     stock = relationship("Stock", back_populates="income_statements")
@@ -63,7 +64,7 @@ class AnnualIncomeStatement(Base):
 class AnnualBalanceSheet(Base):
     __tablename__ = "annualbalancesheets"
 
-    stock_id = Column(String, ForeignKey('stocks.id'), primary_key=True)
+    stock_id = Column(String, ForeignKey('stocks.symbol'), primary_key=True)
     date = Column(Date, primary_key=True)
 
     stock = relationship("Stock", back_populates="balance_sheets")
@@ -105,7 +106,7 @@ class AnnualBalanceSheet(Base):
 class AnnualCashFlow(Base):
     __tablename__ = "annualcashflows"
 
-    stock_id = Column(String, ForeignKey('stocks.id'), primary_key=True)
+    stock_id = Column(String, ForeignKey('stocks.symbol'), primary_key=True)
     date = Column(Date, primary_key=True)
 
     stock = relationship("Stock", back_populates="cash_flows")
