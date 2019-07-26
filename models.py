@@ -9,12 +9,27 @@ class Stock(Base):
     __tablename__ = "stocks"
     symbol = Column(String, primary_key=True) # Ticker Symbol
     name = Column(String)
+
     income_statements = relationship("AnnualIncomeStatement", back_populates="stock", cascade='all, delete-orphan')
     balance_sheets = relationship("AnnualBalanceSheet", back_populates="stock", cascade='all, delete-orphan')
     cash_flows = relationship("AnnualCashFlow", back_populates="stock", cascade='all, delete-orphan')
+    historical_prices = relationship("HistoricalPrice", back_populates="stock", cascade="all, delete-orphan")
 
     def __repr__(self):
         return "<Stock(symbol='%s',name='%s')>" % (self.symbol, self.name)
+
+
+class HistoricalPrice(Base):
+    __tablename__ = "historicalprices"
+    stock_id = Column(String, ForeignKey('stocks.symbol'), primary_key=True)
+    date = Column(Date, primary_key=True)
+
+    stock = relationship("Stock", back_populates="historical_prices")
+
+    close = Column(Float, nullable=False)
+
+    def __repr__(self):
+        return "<HistoricalPrice(symbol='%s',date='%s',close='%s')>" % (self.stock_id, self.date, self.close)
 
 
 class AnnualIncomeStatement(Base):
@@ -129,3 +144,17 @@ class AnnualCashFlow(Base):
 
     def __repr__(self):
         return "<CashFlow(stock='%s',date='%s')>" % (self.stock_id, self.date)
+
+
+class c:
+    """
+    Terminal output colours
+    """
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'

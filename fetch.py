@@ -1,8 +1,9 @@
-import json, requests,os,socket,socks
+import json, requests,os,socket,socks,sys
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from time import sleep
 from models import *
+from rotate_proxy import change_ec2_ip
 
 
 engine = create_engine(f"postgresql://{os.environ['username']}:{os.environ['password']}@postgresql-emergence.c9mqiuvx2w8c.eu-west-2.rds.amazonaws.com:5432/emergence_data", echo=False)
@@ -10,32 +11,25 @@ Base.metadata.create_all(engine, checkfirst=True)
 Session = sessionmaker(bind=engine)
 
 
-class c:
-    """
-    Terminal output colours
-    """
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-
 def change_proxy():
-    # ip = '127.0.0.1'
-    # port = 1080
-    # socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, ip, port)
-    # socket.socket = socks.socksocket
+    ip = '127.0.0.1'
+    port = 1080
+    socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, ip, port)
+    socket.socket = socks.socksocket
+    try:
+        r = requests.get("https://api.getproxylist.com/proxy").json()
+        if 'error' in r:
+            change_ec2_ip()
+    except Exception as e:
+        print(e)
+        quit()
 
     r = requests.get("https://api.getproxylist.com/proxy?protocol[]=socks5").json()
     new_ip = r['ip']
     new_port = r['port']
     socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, ip, port)
     socket.socket = socks.socksocket
-    print(c.BOLD+"NEW"+c.ENDC+" Proxy: %s:%s" % (ip,port))
+    print(c.BOLD+"NEW"+c.ENDC+" Socks5 Proxy: %s:%s" % (ip,port))
 
 def update_stock_list(db):
     url = 'https://financialmodelingprep.com/api/v3/company/stock/list'
@@ -196,24 +190,48 @@ def update_financial_statements(stock, db):
             print("\t["+c.FAIL+"!"+c.ENDC+"] Error fetching %s %s" % (stock, statement_type['Model'].__tablename__))
 
 
+def update_historical_prices(db):
+    url = "https://financialmodelingprep.com/api/v3/historical-price-full/"
+    close_only = "?serietype=line"
+    num_stocks = db.query(Stock).count()
+    for index, stock in enumerate(db.query(Stock).all()):
+        print("["+c.BOLD+str(index+1)+c.ENDC+"/"+str(num_stocks)+"] ", end="")
+        print("Checking %s... " % stock.symbol, end="")
+        sys.stdout.flush()
+        if db.query(HistoricalPrice).filter(HistoricalPrice.stock_id==stock.symbol).first():
+            print(c.OKGREEN+"OKAY"+c.ENDC)
+        else:
+            print(c.FAIL+"MISSING"+c.ENDC)
+            print("\t["+c.OKGREEN+"+"+c.ENDC+"] Fetching %s historical prices" % stock.symbol)
+            while 1:
+                try:
+                    r = requests.get(url+stock.symbol+close_only,timeout=30)
+                except:
+                    change_proxy()
+                    continue
+                else:
+                    break
+            data = r.json()['historical']
+            print("\t\t[*] Found "+data[0]['date']+"->"+data[-1]['date']+" ("+str(len(data)) +" days)")
+            prices = list()
+            for closing_price in data:
+                prices.append(
+                    HistoricalPrice(
+                        stock_id=stock.symbol,
+                        date=datetime.strptime(closing_price['date'], '%Y-%m-%d').date(),
+                        close=closing_price['close']
+                    )
+                )
+            print("\t\t[*] Saving prices to database... ", end="")
+            sys.stdout.flush()
+            db.bulk_save_objects(prices)
+            db.commit()
+            print(c.OKGREEN+"COMPLETE"+c.ENDC)
+
 def fetch():
     db = Session()
     #update_stock_list(db)
-    for index, stock in enumerate(db.query(Stock).order_by(Stock.symbol).all()):
-        print("["+c.BOLD+f"{index+1}"+c.ENDC+f"/{db.query(Stock).count()}] Checking "+c.BOLD+f"{stock.symbol}"+c.ENDC+f" ({stock.name})")
-        update_financial_statements(stock.symbol, db)
-
-"""
-To find financials for stock by year
-
-session.query(AnnualIncomeStatement).join(Stock)\
-        .filter(Stock.symbol=='AAPL')\
-        .filter(AnnualIncomeStatement.date.like("2018%"))\
-        .one_or_none()
-or...
-
-session.query(AnnualIncomeStatement)\
-    .filter(AnnualIncomeStatement.stock_id=='AAPL', AnnualIncomeStatement.date.like("2018%"))\
-    .one_or_none()
-
-"""
+    # for index, stock in enumerate(db.query(Stock).order_by(Stock.symbol).all()):
+    #     print("["+c.BOLD+f"{index+1}"+c.ENDC+f"/{db.query(Stock).count()}] Checking "+c.BOLD+f"{stock.symbol}"+c.ENDC+f" ({stock.name})")
+    #     update_financial_statements(stock.symbol, db)
+    update_historical_prices(db)
