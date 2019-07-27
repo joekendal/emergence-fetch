@@ -212,6 +212,12 @@ def update_historical_prices(db):
                 else:
                     break
             data = r.json()['historical']
+            if not data:
+                print("\t["+c.FAIL+"!"+c.ENDC+"] Historical prices not found for %s" % stock.symbol)
+                print("\t\t[-] Removing stock as useless")
+                db.delete(stock)
+                db.commit()
+                continue
             print("\t\t[*] Found "+data[0]['date']+"->"+data[-1]['date']+" ("+str(len(data)) +" days)")
             prices = list()
             for closing_price in data:
