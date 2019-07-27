@@ -12,9 +12,7 @@ Session = sessionmaker(bind=engine)
 
 
 def change_proxy():
-    ip = '127.0.0.1'
-    port = 1080
-    socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, ip, port)
+    socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, 'localhost', 1080)
     socket.socket = socks.socksocket
     try:
         r = requests.get("https://api.getproxylist.com/proxy").json()
@@ -28,7 +26,6 @@ def change_proxy():
     new_ip = r['ip']
     new_port = r['port']
     socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, ip, port)
-    socket.socket = socks.socksocket
     print(c.BOLD+"NEW"+c.ENDC+" Socks5 Proxy: %s:%s" % (ip,port))
 
 def update_stock_list(db):

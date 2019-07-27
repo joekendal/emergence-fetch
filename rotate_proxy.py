@@ -19,17 +19,17 @@ def change_ec2_ip():
         public_ip = address['PublicIp']
         #private_ip = address['PrivateIpAddress']
 
-        print("\t["+c.WARNING+"*"+c.ENDC+"] Current IP: %s" % public_ip)
+        print("\t["+c.WARNING+"*"+c.ENDC+"] Current IP: "+c.BOLD+f"{public_ip}"+c.ENDC)
 
         # Release Elastic IP
-        print("\t["+c.WARNING+"-"+c.ENDC+"] Releasing IP...")
+        print("\t["+c.FAIL+"-"+c.ENDC+"] Releasing IP...")
         response = ec2.release_address(AllocationId=address['AllocationId'])
 
         # Get new Elastic IP
-        print("\t["+c.WARNING+"+"+c.ENDC+"] Getting new IP... ", end=""); sys.stdout.flush()
+        print("\t["+c.OKGREEN+"+"+c.ENDC+"] Getting new IP... ", end=""); sys.stdout.flush()
         allocation = ec2.allocate_address(Domain='vpc')
         new_ip = allocation['PublicIp']
-        print(new_ip)
+        print(c.BOLD+new_ip+c.ENDC)
 
         # Associate address
         print("\t["+c.WARNING+"*"+c.ENDC+"] Attaching IP to instance... ", end=""); sys.stdout.flush()
@@ -43,6 +43,7 @@ def change_ec2_ip():
     else:
         subprocess.run(["killall", "ssh"])
         # Create local ssh tunnel proxy to EC2 instance
+        print("["+c.OKBLUE+"*"+c.ENDC+"] Establishing new SSH socks5 tunnel proxy to localhost:1080")
         subprocess.check_output(["ssh", "-D", "1080", "-fCqN",
                                  "-i", "~/.ssh/ec2-ubuntu.pem",
                                  "-o", "StrictHostKeyChecking=no",
